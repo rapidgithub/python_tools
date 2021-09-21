@@ -1,7 +1,11 @@
 This script takes 2 arguments.
+
 --log followed by aggregated yarn log of hive on tez job.
+
 --dagid followed by positive integer depending on which query you want to analyze
+
 --dagid is optional and only needed if aggregated yarn log has more than one query.
+
 If no --dagid passed then code will analyze first dag or query.
 
 This code create app_log_dir on working directoy which use the logic of below python code.
