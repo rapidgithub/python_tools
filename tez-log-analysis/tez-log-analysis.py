@@ -123,9 +123,11 @@ def analyze_log(dag_log, logs_list):
             for file_path in logs_list:
                 if grep_line(file_path, re.compile(log_regex)):
                     long_log_file.append(file_path)
+        if len(task_failed) > 6:
+            task_failed = task_failed[:5]
         if len(task_failed) > 0:
             for items in task_failed:
-                print "Found failure for task {}".format(items[2])
+                print "\n\tFound failure for task {}".format(items[2])
                 log_regex = "LogType:syslog_{}".format(items[2])
                 for file_path in logs_list:
                     if grep_line(file_path, re.compile(log_regex)):
@@ -154,8 +156,8 @@ if __name__ == '__main__':
         print "\n\tCollect the yarn log after killing the application or wait for it to complete!\n"
     else:
         if path.exists('app_log_dir'):
-            print "\n\tERROR : Found directory or file with name app_log_dir in current location."
-            print "\tERROR : Please rename or move the directory / file and try again.\n"
+            print "\n\tERROR : Directory or file with name app_log_dir exists in current location.\n"
+            print "\tRename / move directory or file with name app_log_dir and try again.\n"
         else:
             split_logs(args.log, 'app_log_dir')
             regObj = re.compile(DAG_LOG_REGEX)
@@ -166,7 +168,7 @@ if __name__ == '__main__':
                     dag_files.append(filepath)
             dag_count = len(dag_files)
             if dag_count == 1:
-                print "\tAnalyzing dag log {}".format(dag_files[0].split('/')[3])
+                print "\n\tAnalyzing dag log {}".format(dag_files[0].split('/')[3])
                 analyze_log(dag_files[0], all_files)
             elif dag_count > 1:
                 dag_files.sort()
@@ -181,5 +183,5 @@ if __name__ == '__main__':
                     print "\tExample:\n\tpython", sys.argv[0], "--logs <log_file> --dagid 1\n"
                     analyze_log(dag_files[0], all_files)
             else:
-                print "No dag log found in {}".format(all_files)
+                print "\n\tNo dag log found in \n {}".format(all_files)
                 rmtree('app_log_dir')
