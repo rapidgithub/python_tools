@@ -9,7 +9,8 @@ This script takes 2 arguments.
 If no --dagid passed then code will analyze first dag or query.
 
 This code create app_log_dir on working directoy which use the logic of below python code.
-https://raw.githubusercontent.com/TarunParimi/yarn-log-splitter/master/yarn-log-splitter.py
+
+>https://raw.githubusercontent.com/TarunParimi/yarn-log-splitter/master/yarn-log-splitter.py
 
 If app_log_dir is present on working directoy then code will print ERRORR and exit.
 
@@ -29,4 +30,4 @@ Longest wait time of 4 seconds was taken by attempt_1631466459248_0034_1_00_0000
 
 Check below logs for details about long running and waiting tasks:
 app_log_dir/containers/container_e71_1631466459248_0034_01_000003/syslog_attempt_1631466459248_0034_1_00_000011_0
-app_log_dir/containers/container_e71_1631466459248_0034_01_000001/syslog_dag_1631466459248_0034_1```
+app_log_dir/containers/container_e71_1631466459248_0034_01_000001/syslog_dag_1631466459248_0034_1
