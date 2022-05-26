@@ -91,7 +91,7 @@ def grep_line(file_path, regex):
 
 
 def analyze_log(dag_log, logs_list):
-    tasks_list = grep_line(dag_log, re.compile("TASK_ATTEMPT_FINIS"))
+    tasks_list = grep_line(dag_log, re.compile("Event:TASK_ATTEMPT_FINISHED"))
     if len(tasks_list) > 0:
         print "Total tasks in dag = {}".format(len(tasks_list))
         task_ok = []
