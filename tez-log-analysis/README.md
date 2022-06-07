@@ -6,9 +6,9 @@
 
 `--dagid` followed by positive integer.
 
-`--dagid` is optional and only needed if aggregated yarn log has more than one query.
+If no `--dagid` passed then code will analyze if only one dag is present in log.
 
-If no `--dagid` passed then code will analyze first dag or query.
+Else `--dagid` is needed if log file contain more than one dags.
 
 This code creates app_log_dir under working directoy.
 
@@ -16,21 +16,24 @@ The logic of splitting the log is based on below python code.
 
 >https://raw.githubusercontent.com/TarunParimi/yarn-log-splitter/master/yarn-log-splitter.py
 
-If app_log_dir is already present under working directoy then code will print ERRORR and exit.
+If app_log_dir is already present under working directoy then code will print usage on how to analyze pre-split logs.
 
 ```
-python ~/tez-log-analysis.py --log application_1631466459248_0034.log
+        ERROR : Directory or file with name app_log_dir exists in current location.
+        Rename / move the directory or file with name app_log_dir and run again.
+        To run the analysis on existing directory use below syntax.
 
-        ERROR : Found directory or file with name app_log_dir in current location.
-        ERROR : Please rename or move the directory / file and try again. 
+        python tez-log-analysis/tez-log-analysis.py --mode dir --appdir <aggregated_log_split_dir> [--dagid 1]
 ```
-The code first breaks the log into containers using yarn-log-splitter.py logic 
+The code first breaks the log into multiple log files and group by containers. 
 
-After that it analyze the log and give details on failed tasks (if present) with log file name to check.
+It will give details about failed tasks (if present) with log file name to check.
 
 Then it checks for longest running task in the query and prints log file path for same.
 
-It also print the dag log path and wait time for longest waiting task which can help in identifying yarn resource issue.
+It also print the dag log path which can be used to check wait time for longest waiting task.
+
+It may help in confirming yarn resource issue.
 
 ### Example 
 ```
@@ -43,3 +46,4 @@ Longest wait time of 4 seconds was taken by attempt_1631466459248_0034_1_00_0000
 Check below logs for details about long running and waiting tasks:
 app_log_dir/containers/container_e71_1631466459248_0034_01_000003/syslog_attempt_1631466459248_0034_1_00_000011_0
 app_log_dir/containers/container_e71_1631466459248_0034_01_000001/syslog_dag_1631466459248_0034_1
+```
