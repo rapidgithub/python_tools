@@ -1,16 +1,21 @@
-import sys, re, argparse
-from os import path, makedirs, symlink, chdir, mkdir, walk
+import argparse
+import re
+import sys
 from shutil import rmtree
+from os import path, makedirs, symlink, mkdir, walk
 
 parser = argparse.ArgumentParser()
-parser.add_argument("--log", required=True,
-                    help="Tez application log")
-parser.add_argument("--dagid", type=int, help="Dag id to process, defaults to 1 if not specified")
+parser.add_argument("--mode", choices=['file', 'dir'], default='file')
+parser.add_argument("--dagid", type=int, help="Dag id to be analyzed.")
+parser.add_argument("--log", help="Tez application log file.")
+parser.add_argument("--appdir", help="Pre split tez application log dir.")
 args = parser.parse_args()
 
 LOCAL_AGGREGATION = "LogAggregationType: LOCAL"
 DAG_LOG_REGEX = "LogType:syslog_dag_\d+_\d+_\d+$"
+"""
 DOT_LOG_REGEX = "LogType:dag_\d+_\d+_\d+_priority.dot"
+"""
 CONTAINER_PREFIX = 'Container: '
 LOGTYPE_PREFIX = "LogType:"
 LOGTYPE_SEPARATOR = ":"
@@ -90,98 +95,136 @@ def grep_line(file_path, regex):
     return res
 
 
+def print_failed_tasks(tasks_failed, logs_list):
+    for items in tasks_failed:
+        print("\n\tFound failure for task {}".format(items[2]))
+        log_regex = "LogType:syslog_{}".format(items[2])
+        for file_path in logs_list:
+            if grep_line(file_path, re.compile(log_regex)):
+                print("Log location: {}".format(file_path))
+
+
 def analyze_log(dag_log, logs_list):
     tasks_list = grep_line(dag_log, re.compile("Event:TASK_ATTEMPT_FINISHED"))
     if len(tasks_list) > 0:
-        print "Total tasks in dag = {}".format(len(tasks_list))
-        task_ok = []
-        task_failed = []
+        print("Total tasks in dag = {}".format(len(tasks_list)))
+        tasks_passed = []
+        tasks_failed = []
         for task in tasks_list:
             task_id = task.split(",")[2].split("=")[1]
             task_status = task.split(",")[8].split("=")[1]
             wait_time = int(task.split(",")[5].split("=")[1]) - int(task.split(",")[3].split("=")[1])
             run_time = int(task.split(",")[7].split("=")[1])
             if task_status == 'SUCCEEDED':
-                task_ok.append((wait_time, run_time, task_id, task_status))
+                tasks_passed.append((wait_time, run_time, task_id, task_status))
             elif task_status == 'FAILED':
-                task_failed.append((wait_time, run_time, task_id, task_status))
+                tasks_failed.append((wait_time, run_time, task_id, task_status))
         top_runtime = []
         top_wait = []
-        if len(task_ok) > 0:
-            top_runtime = sorted(task_ok, key=lambda x: x[1])[-1]
-            top_wait = sorted(task_ok)[-1]
-        elif len(task_ok) == 0 and len(task_failed) == 0:
-            print "No failed or succeeded task found. Check below log for details.\n{}".format(dag_log)
+        if len(tasks_passed) > 0:
+            top_runtime = sorted(tasks_passed, key=lambda x: x[1])[-1]
+            top_wait = sorted(tasks_passed)[-1]
+        elif len(tasks_passed) == 0 and len(tasks_failed) == 0:
+            print("No failed or succeeded tasks found. Check below log for details.\n{}".format(dag_log))
             return
         long_log_file = []
         if len(top_wait) > 0 and len(top_runtime) > 0:
-            print "Longest run time of {} seconds was taken by {} with status " \
-                  "{}".format(top_runtime[1] / 1000, top_runtime[2], top_runtime[3])
-            print "Longest wait time of {} seconds was taken by {} with status " \
-                  "{}".format(top_wait[0] / 1000, top_wait[2], top_wait[3])
+            print("Longest run time of {} seconds was taken by task id {} with status "
+                  "{}".format(top_runtime[1] / 1000, top_runtime[2], top_runtime[3]))
+            print("Longest wait time of {} seconds was taken by task id {} with status "
+                  "{}".format(top_wait[0] / 1000, top_wait[2], top_wait[3]))
             log_regex = "LogType:syslog_{}".format(top_runtime[2])
             for file_path in logs_list:
                 if grep_line(file_path, re.compile(log_regex)):
                     long_log_file.append(file_path)
-        if len(task_failed) > 6:
-            task_failed = task_failed[:5]
-        if len(task_failed) > 0:
-            for items in task_failed:
-                print "\n\tFound failure for task {}".format(items[2])
-                log_regex = "LogType:syslog_{}".format(items[2])
-                for file_path in logs_list:
-                    if grep_line(file_path, re.compile(log_regex)):
-                        print "Log location: {}".format(file_path)
+        if len(tasks_failed) > 6:
+            tasks_failed = tasks_failed[:5]
+            print_failed_tasks(tasks_failed, logs_list)
+        elif len(tasks_failed) > 0:
+            print_failed_tasks(tasks_failed, logs_list)
         if len(long_log_file) > 0:
-            print "\nCheck below logs for details about long running and waiting " \
-                  "tasks:\n{}\n{}\n".format(long_log_file[-1], dag_log)
+            print("\nCheck below logs for details about long running and waiting "
+                  "tasks:\n{}\n{}\n".format(long_log_file[-1], dag_log))
         else:
-            print "\n\tDag log location:\n{}".format(dag_log)
+            print("\n\tDag log location:\n{}".format(dag_log))
     else:
-        print "No task found in dag.\nCheck below log for details.\n{}".format(dag_log)
+        print("No task found in dag.\nCheck below log for details.\n{}".format(dag_log))
 
 
+"""
 def print_viz(dag_log_dot):
     dot_file = []
     with open(dag_log_dot, "r") as ifile:
         for line in ifile:
             dot_file.append(line)
-    print dot_file
+    print(dot_file)
+"""
+
+
+def analyze_dir(app_log):
+    all_files = findfiles(app_log)
+    dag_files = []
+    dag_regObj = re.compile(DAG_LOG_REGEX)
+    for filepath in all_files:
+        if grep_line(filepath, dag_regObj):
+            dag_files.append(filepath)
+    dag_count = len(dag_files)
+    if dag_count == 1:
+        print("\n\tAnalyzing dag log {}".format(dag_files[0].split('/')[3]))
+        analyze_log(dag_files[0], all_files)
+    elif dag_count > 1:
+        dag_files = map(lambda x: (x, int(x.split('/')[3].split('_')[4])), dag_files)
+        dag_files = sorted(dag_files, key=lambda x: x[1])
+        dagids = map(lambda x: x[1], dag_files)
+        if args.dagid and dag_count >= args.dagid > 0:
+            print("\nAnalyzing dag id {}".format(dag_files[args.dagid - 1][0].split('/')[3]))
+            analyze_log(dag_files[args.dagid - 1][0], all_files)
+        else:
+            print("\n\tNote: Total {} dags found.".format(dag_count))
+            print("\nEither --dagid option was not used or dag with given id was not found.")
+            usage()
+            if dag_count > 10:
+                print("Valid dag ids are(showing top 10):\n{}\n".format(dagids[:10]))
+            else:
+                print("Valid dag ids are:\n{}\n".format(dagids))
+    else:
+        print("\n\tNo dag log found in {}\n".format(app_log))
+
+
+def usage():
+    print("1. To run analysis on aggregated tez log.")
+    print("\tpython " + sys.argv[0] + " --log <aggregated_log_file> [--dagid 1]\n")
+    print("2. To run analysis on already split aggregated tez log directory.")
+    print("\tpython " + sys.argv[0] + " --mode dir --appdir <aggregated_log_split_dir> [--dagid 1]\n")
 
 
 if __name__ == '__main__':
-    if grep_line(args.log, re.compile(LOCAL_AGGREGATION)):
-        print "\n\tERROR : Log file is not complete."
-        print "\n\tMake sure the provided yarn job log says LogAggregationType: AGGREGATED "
-        print "\n\tCollect the yarn log after killing the application or wait for it to complete!\n"
-    else:
-        if path.exists('app_log_dir'):
-            print "\n\tERROR : Directory or file with name app_log_dir exists in current location.\n"
-            print "\tRename / move directory or file with name app_log_dir and try again.\n"
-        else:
-            split_logs(args.log, 'app_log_dir')
-            regObj = re.compile(DAG_LOG_REGEX)
-            all_files = findfiles('app_log_dir')
-            dag_files = []
-            for filepath in all_files:
-                if grep_line(filepath, regObj):
-                    dag_files.append(filepath)
-            dag_count = len(dag_files)
-            if dag_count == 1:
-                print "\n\tAnalyzing dag log {}".format(dag_files[0].split('/')[3])
-                analyze_log(dag_files[0], all_files)
-            elif dag_count > 1:
-                dag_files.sort()
-                if args.dagid and args.dagid <= dag_count:
-                    print "\nAnalyzing dag id {}".format(dag_files[args.dagid - 1].split('/')[3])
-                    analyze_log(dag_files[args.dagid - 1], all_files)
-                else:
-                    print "\nAnalyzing dag {}".format(dag_files[0].split('/')[3])
-                    print "\n\tNote: Total {} dags found.".format(dag_count), \
-                        "\n\tEither dagid option was not used or dag with given id in option not found.", \
-                        "\n\tTo check specific dag rerun script with --dagid <dag-number>"
-                    print "\tExample:\n\tpython", sys.argv[0], "--logs <log_file> --dagid 1\n"
-                    analyze_log(dag_files[0], all_files)
+    if args.mode == 'file':
+        if args.log and path.isfile(args.log):
+            if grep_line(args.log, re.compile(LOCAL_AGGREGATION)):
+                print("\n\tERROR : Log file is not complete.")
+                print("\n\tMake sure yarn job log collected contains the line LogAggregationType: AGGREGATED ")
+                print("\n\tCollect the yarn job log after killing the application or wait for it to complete!\n")
             else:
-                print "\n\tNo dag log found in \n {}".format(all_files)
-                rmtree('app_log_dir')
+                if path.exists('app_log_dir'):
+                    print("\n\tERROR : Directory or file with name app_log_dir exists in current location.")
+                    print("\tRename / move the directory or file with name app_log_dir and run again.")
+                    print("\tTo run the analysis on existing directory use below syntax.")
+                    print("\n\tpython " + sys.argv[0] + " --mode dir --appdir <aggregated_log_split_dir> [--dagid 1]\n")
+                else:
+                    split_logs(args.log, 'app_log_dir')
+                    analyze_dir('app_log_dir')
+        elif args.log and path.isfile(args.log) is False:
+            print("\nERROR: Provided option \"{}\" is not valid file".format(args.log))
+            exit(1)
+        else:
+            print("\n\tERROR: No options provided.\n")
+            usage()
+    else:
+        if args.appdir:
+            if path.isdir(args.appdir):
+                analyze_dir(args.appdir)
+            else:
+                print("Path \"{}\" is not a directory!".format(args.appdir))
+        else:
+            print("ERROR: Required option --appdir is missing!")
