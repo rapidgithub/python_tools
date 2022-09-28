@@ -82,7 +82,9 @@ def findfiles(log_path):
     res = []
     for root, dirs, fnames in walk(log_path):
         for fname in fnames:
-            res.append(path.join(root, fname))
+            fname_path = path.join(root, fname)
+            if path.islink(fname_path) is False:
+                res.append(fname_path)
     return res
 
 
@@ -97,17 +99,23 @@ def grep_line(file_path, regex):
 
 def print_failed_tasks(tasks_failed, logs_list):
     for items in tasks_failed:
-        print("\n\tFound failure for task {}".format(items[2]))
+        msg = "\n\tFound failure for task {}".format(items[2])
+        print(msg)
+        append_log(msg)
         log_regex = "LogType:syslog_{}".format(items[2])
         for file_path in logs_list:
             if grep_line(file_path, re.compile(log_regex)):
-                print("Log location: {}".format(file_path))
+                msg = "Log location: {}".format(file_path)
+                print(msg)
+                append_log(msg)
 
 
 def analyze_log(dag_log, logs_list):
     tasks_list = grep_line(dag_log, re.compile("Event:TASK_ATTEMPT_FINISHED"))
     if len(tasks_list) > 0:
-        print("Total tasks in dag = {}".format(len(tasks_list)))
+        msg = "Total tasks in dag = {}".format(len(tasks_list))
+        print(msg)
+        append_log(msg)
         tasks_passed = []
         tasks_failed = []
         for task in tasks_list:
@@ -124,8 +132,14 @@ def analyze_log(dag_log, logs_list):
         if len(tasks_passed) > 0:
             top_runtime = sorted(tasks_passed, key=lambda x: x[1])[-1]
             top_wait = sorted(tasks_passed)[-1]
+            msg = "Printing details for all tasks sorted by runtime(ms) desc..\n(wait_time, run_time, task_id, task_status)"
+            append_log(msg)
+            for items in sorted(tasks_passed, key=lambda x: x[1]):
+                append_log(str(items))
         elif len(tasks_passed) == 0 and len(tasks_failed) == 0:
-            print("No failed or succeeded tasks found. Check below log for details.\n{}".format(dag_log))
+            msg = "No failed or succeeded tasks found. Check below log for details.\n{}".format(dag_log)
+            print(msg)
+            append_log(msg)
             return
         long_log_file = []
         if len(top_wait) > 0 and len(top_runtime) > 0:
@@ -143,12 +157,28 @@ def analyze_log(dag_log, logs_list):
         elif len(tasks_failed) > 0:
             print_failed_tasks(tasks_failed, logs_list)
         if len(long_log_file) > 0:
-            print("\nCheck below logs for details about long running and waiting "
-                  "tasks:\n{}\n{}\n".format(long_log_file[-1], dag_log))
+            print("\nCheck below log for details about long running "
+                  "task:\n{}".format(long_log_file[-1]))
+            print("\nCheck below log for details about waiting "
+                              "task:\n{}".format(dag_log))
         else:
             print("\n\tDag log location:\n{}".format(dag_log))
     else:
-        print("No task found in dag.\nCheck below log for details.\n{}".format(dag_log))
+        msg = "No task found in dag.\nCheck below log for details.\n{}".format(dag_log)
+        print(msg)
+        overwrite_log(msg)
+
+
+def overwrite_log(msg):
+    out_log = open('tez-log-analysis.out', 'w+')
+    out_log.write(msg+'\n')
+    out_log.close()
+
+
+def append_log(msg):
+    out_log = open('tez-log-analysis.out', 'a+')
+    out_log.write(msg+'\n')
+    out_log.close()
 
 
 """
@@ -170,14 +200,18 @@ def analyze_dir(app_log):
             dag_files.append(filepath)
     dag_count = len(dag_files)
     if dag_count == 1:
-        print("\n\tAnalyzing dag log {}".format(dag_files[0].split('/')[3]))
+        msg = "\n\tAnalyzing dag log {}".format(dag_files[0].split('/')[3])
+        print(msg)
+        append_log(msg)
         analyze_log(dag_files[0], all_files)
     elif dag_count > 1:
         dag_files = map(lambda x: (x, int(x.split('/')[3].split('_')[4])), dag_files)
         dag_files = sorted(dag_files, key=lambda x: x[1])
-        dagids = map(lambda x: x[1], dag_files)
+        dagids = list(map(lambda x: x[1], dag_files))
         if args.dagid and dag_count >= args.dagid > 0:
-            print("\nAnalyzing dag id {}".format(dag_files[args.dagid - 1][0].split('/')[3]))
+            msg = "\nAnalyzing dag id {}".format(dag_files[args.dagid - 1][0].split('/')[3])
+            print(msg)
+            append_log(msg)
             analyze_log(dag_files[args.dagid - 1][0], all_files)
         else:
             print("\n\tNote: Total {} dags found.".format(dag_count))
@@ -194,7 +228,7 @@ def analyze_dir(app_log):
 def usage():
     print("1. To run analysis on aggregated tez log.")
     print("\tpython " + sys.argv[0] + " --log <aggregated_log_file> [--dagid 1]\n")
-    print("2. To run analysis on already split aggregated tez log directory.")
+    print("2. To run analysis on already split and aggregated tez log directory.")
     print("\tpython " + sys.argv[0] + " --mode dir --appdir <aggregated_log_split_dir> [--dagid 1]\n")
 
 
@@ -205,26 +239,34 @@ if __name__ == '__main__':
                 print("\n\tERROR : Log file is not complete.")
                 print("\n\tMake sure yarn job log collected contains the line LogAggregationType: AGGREGATED ")
                 print("\n\tCollect the yarn job log after killing the application or wait for it to complete!\n")
+                overwrite_log('Nothing to add..')
             else:
                 if path.exists('app_log_dir'):
                     print("\n\tERROR : Directory or file with name app_log_dir exists in current location.")
                     print("\tRename / move the directory or file with name app_log_dir and run again.")
                     print("\tTo run the analysis on existing directory use below syntax.")
                     print("\n\tpython " + sys.argv[0] + " --mode dir --appdir <aggregated_log_split_dir> [--dagid 1]\n")
+                    overwrite_log('Analysis failed!')
                 else:
                     split_logs(args.log, 'app_log_dir')
+                    overwrite_log('Starting analysis for app_log_dir')
                     analyze_dir('app_log_dir')
         elif args.log and path.isfile(args.log) is False:
             print("\nERROR: Provided option \"{}\" is not valid file".format(args.log))
+            overwrite_log('Analysis failed!')
             exit(1)
         else:
             print("\n\tERROR: No options provided.\n")
+            overwrite_log('Analysis failed!')
             usage()
     else:
         if args.appdir:
             if path.isdir(args.appdir):
+                overwrite_log('Starting analysis for {}'.format(args.appdir))
                 analyze_dir(args.appdir)
             else:
                 print("Path \"{}\" is not a directory!".format(args.appdir))
+                overwrite_log('Analysis failed!')
         else:
             print("ERROR: Required option --appdir is missing!")
+            overwrite_log('Analysis failed!')
