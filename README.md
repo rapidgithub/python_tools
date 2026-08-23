@@ -1,2 +1,2 @@
-Collection of my python works.
+Collection of Python tools.
 
