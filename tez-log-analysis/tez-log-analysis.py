@@ -31,14 +31,18 @@ LOGTYPE_PREFIX = "LogType:"
 LOGTYPE_SEPARATOR = ":"
 LOGTYPE_END = 'End of LogType:'
 
-# Command-line arguments
-parser = argparse.ArgumentParser(description='Analyze Tez application logs')
-parser.add_argument("--mode", choices=['file', 'dir'], default='file',
-                    help="Mode: analyze single file or directory")
-parser.add_argument("--dagid", type=int, help="Dag id to be analyzed")
-parser.add_argument("--log", help="Tez application log file")
-parser.add_argument("--appdir", help="Pre-split tez application log directory")
-args = parser.parse_args()
+def build_parser() -> argparse.ArgumentParser:
+    """Create the CLI argument parser."""
+    parser = argparse.ArgumentParser(description='Analyze Tez application logs')
+    parser.add_argument("--mode", choices=['file', 'dir'], default='file',
+                        help="Mode: analyze single file or directory")
+    parser.add_argument("--dagid", type=int, help="Dag id to be analyzed")
+    parser.add_argument("--log", help="Tez application log file")
+    parser.add_argument("--appdir", help="Pre-split tez application log directory")
+    return parser
+
+
+args = argparse.Namespace(mode='file', dagid=None, log=None, appdir=None)
 
 
 @dataclass
@@ -307,12 +311,13 @@ def analyze_log(dag_log: Path, logs_list: List[Path]) -> None:
             logger.info(f"\n(Showing first 5 of {len(tasks_failed)} failed tasks)")
 
 
-def analyze_dir(app_log: Path) -> None:
+def analyze_dir(app_log: Path, dagid: int | None = None) -> None:
     """
     Analyze all DAG logs in a directory.
     
     Args:
         app_log: Directory containing split/aggregated logs
+        dagid: Optional DAG ID to analyze when multiple DAG logs are present
     """
     app_log = Path(app_log)
     all_files = find_files(app_log)
@@ -348,9 +353,9 @@ def analyze_dir(app_log: Path) -> None:
         dag_files_with_id.sort(key=lambda x: x[1])
         dagids = [dag_id for _, dag_id in dag_files_with_id]
         
-        if args.dagid and 0 < args.dagid <= dag_count:
-            selected_dag = dag_files_with_id[args.dagid - 1][0]
-            logger.info(f"Analyzing dag id {args.dagid}: {selected_dag.name}")
+        if dagid and 0 < dagid <= dag_count:
+            selected_dag = dag_files_with_id[dagid - 1][0]
+            logger.info(f"Analyzing dag id {dagid}: {selected_dag.name}")
             analyze_log(selected_dag, all_files)
         else:
             logger.warning(f"Total {dag_count} dags found.")
@@ -374,8 +379,11 @@ def usage() -> None:
     print(f"\tpython {script_name} --mode dir --appdir <aggregated_log_split_dir> [--dagid 1]\n")
 
 
-def main() -> None:
+def main(argv: List[str] | None = None) -> None:
     """Main entry point."""
+    global args
+    args = build_parser().parse_args(argv)
+
     if args.mode == 'file':
         if not args.log:
             logger.error("No options provided.")
@@ -403,7 +411,7 @@ def main() -> None:
         
         logger.info("Starting log split...")
         split_logs(log_path, output_dir)
-        analyze_dir(output_dir)
+        analyze_dir(output_dir, dagid=args.dagid)
     
     else:  # mode == 'dir'
         if not args.appdir:
@@ -416,7 +424,7 @@ def main() -> None:
             return
         
         logger.info(f"Starting analysis for {args.appdir}")
-        analyze_dir(appdir)
+        analyze_dir(appdir, dagid=args.dagid)
 
 
 if __name__ == '__main__':
