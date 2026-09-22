@@ -20,7 +20,7 @@ jobs:
         with:
           script: |
             // Get the PR associated with this workflow run
-            const prs = await github.rest.pulls.listFromRepo({
+            const prs = await github.rest.pulls.list({
               owner: context.repo.owner,
               repo: context.repo.repo,
               state: 'open',
