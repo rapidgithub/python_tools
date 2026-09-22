@@ -29,12 +29,8 @@ All code **must** maintain compatibility with the GitHub Actions matrix:
 - **Target OS**: Linux / macOS / POSIX
 
 ### Critical Compatibility Constraints:
-- **Do not use syntax or features introduced in Python 3.10+ only**:
-  - ❌ Avoid PEP 604 union syntax (`int | None` or `str | float`).
-  - ✔️ Use `typing.Union[int, None]` or `typing.Optional[int]`.
-  - ❌ Avoid `match`/`case` pattern matching statements.
-  - ❌ Avoid `typing.Self` (Python 3.11+).
-- Always ensure stdlib imports and third-party APIs used are supported on Python 3.8.
+- Use syntax and standard-library features supported by all versions in the matrix.
+- Keep third-party APIs compatible with the versions installed by the workflow.
 
 ---
 
@@ -47,13 +43,14 @@ The project uses a lean dependency footprint. Dependencies are managed per workf
 pip install pylint pytest
 
 # Tool runtime dependencies
-pip install requests beautifulsoup4 lxml
+pip install requests beautifulsoup4
 ```
 
 When introducing new libraries:
 - Keep third-party dependencies to a minimum.
 - Prefer Python standard library (`urllib`, `argparse`, `dataclasses`, `pathlib`, `logging`, `re`) where feasible.
-- If adding a dependency required across the project, update `.github/workflows/pylint.yml` accordingly.
+- If adding a dependency required across the project, update `.github/workflows/pylint.yml`
+  and this document accordingly.
 
 ---
 
@@ -63,7 +60,7 @@ The repository enforces strict continuous integration via two GitHub Actions wor
 
 ### A. Pylint & Test Suite (`.github/workflows/pylint.yml`)
 Runs on every `push` and `pull_request`:
-1. **Matrix Evaluation**: Executes concurrently across Python `3.8`, `3.9`, and `3.10`.
+1. **Matrix Evaluation**: Executes concurrently across Python `3.11`, `3.12`, and `3.13`.
 2. **Unit Tests**:
    ```bash
    pytest -q
