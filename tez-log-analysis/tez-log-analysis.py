@@ -4,8 +4,7 @@ import re
 import sys
 from dataclasses import dataclass
 from pathlib import Path
-from shutil import rmtree
-from typing import List, Dict, Tuple
+from typing import List, Dict
 
 # Configure logging once
 def setup_logging(output_file: str = 'tez-log-analysis.out'):
